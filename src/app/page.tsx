@@ -3,85 +3,156 @@ import AddIcon from "@/components/addIcon";
 import CopyIcon from "@/components/copyIcon";
 import DeleteIcon from "@/components/deleteIcon";
 import EditIcon from "@/components/editIcon";
-import React from "react";
+import React, { useDebugValue, useEffect, useState } from "react";
+
 import { Bounce, toast, ToastContainer } from "react-toastify";
-export default function Home() {
+import { redirect } from "next/navigation";
+import { v4 as uuidv4 } from 'uuid';
+import 'react-toastify/dist/ReactToastify.css';
+import { useSession } from "next-auth/react";
+import { useRouter } from "next/navigation";
+import { stat } from "fs";
+
+
+type PasswordItem = {
+  id: string;
+  website: string;
+  username: string;
+  password: string;
+};
+
+export default async function Home() {
+  const { data: session, status } = useSession();
+  const router = useRouter();
+  useEffect(() => {
+    if (status === "unauthenticated") {
+      router.replace("/login");
+    }
+  }, [status, router]);
+
+  if(status === "loading"){
+    return <div>Loading...</div>;
+  }
+
+ 
+  const [items, setItems] = useState<PasswordItem[]>([]);
   const [form, setForm] = React.useState({
     website: "",
     username: "",
     password: "",
   });
-  const [passwordArr, setPasswordArr] = React.useState<any[]>([]);
-  React.useEffect(() => {
-    let passwords = localStorage.getItem("passwords");
-    if (passwords) {
-      setPasswordArr(JSON.parse(passwords));
-    }
-  }, []);
+  const [showPassword, setShowPassword] = React.useState(false);
+  async function loadPasswords() {
+    const res = await fetch("/api/passwords");
+    const data = await res.json();
+    setItems(data);
+  }
 
-  const showPass = (e) => {
-    e.preventDefault();
-    const passwordInput = document.querySelector('input[type="password"]') as HTMLInputElement;
-    if (passwordInput) {
-      if (passwordInput.type === "password") {
-        passwordInput.type = "text";
-      } else {
-        passwordInput.type = "password";
-      }
-    }
-  };
-  const changeImg = (e) => {
-    e.preventDefault();
-    const imgElement = e.target as HTMLImageElement;
-    if (imgElement) {
-      if (imgElement.src.includes("eye-open.png")) {
-        imgElement.src = "/closed-eyes.png";
-      } else {
-        imgElement.src = "/eye-open.png";
-      }
-    }
-  };
+
+
 
   const savepassword = (e: any) => {
     e.preventDefault();
-    console.log(form);
-    if (form.website === "" || form.username === "" || form.password === "") {
-      alert("Please fill all the fields");
+    if (!form.website || !form.username || !form.password) {
+      toast.error("Please fill all the fields", {
+        position: "bottom-right",
+        autoClose: 5000,
+        hideProgressBar: false,
+        closeOnClick: true,
+        pauseOnHover: false,
+        draggable: true,
+        progress: undefined,
+        theme: "dark",
+        transition: Bounce,
+
+      });
       return;
+
     }
-    const newPasswordArr = [...passwordArr, form];
-    localStorage.setItem("passwords", JSON.stringify(newPasswordArr));
-    setPasswordArr(newPasswordArr);
+    fetch('api/passwords', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+
+      body: JSON.stringify(form),
+    },).then((res) => res.json())
+      .then((data) => {
+        console.log('Success:', data);
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
+    setForm({ website: "", username: "", password: "" });
+
+    loadPasswords();
+    toast.success("Password saved successfully!", {
+      position: "bottom-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: true,
+      progress: undefined,
+      theme: "dark",
+      transition: Bounce,
+    });
 
 
-    console.log(passwordArr);
 
   };
+  useEffect(() => {
+    loadPasswords();
+  }, []);
+
   const handleChange = (e: any) => {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
-  const handleDelete = (e: any) => {
-    // e.preventDefault();
-    // const index = passwordArr.findIndex((item));
-    // if (index > -1) {
-    //   const newPasswordArr = [...passwordArr];
-    //   newPasswordArr.splice(index, 1);
-    //   setPasswordArr(newPasswordArr);
-    //   localStorage.setItem("passwords", JSON.stringify(newPasswordArr));
-    // } else {
-    //   alert("Password not found");
-    // }
-  }
-  const handleEdit = (e: any) => {
-    e.preventDefault();
+  const handleDelete = (id: any) => {
+
+    const res = window.confirm("Are you sure you want to delete this password?");
+    if (!res) {
+      return;
+    }
+    fetch(`/api/passwords?id=${id}`, {
+      method: 'DELETE',
+    }).then((res) => res.json())
+      .then((data) => {
+        console.log('Success:', data);
+      })
+      .catch((error) => {
+        console.error('Error:', error);
+      });
+    setItems(items.filter(item => item.id !== id));
+
+    toast.warn("Password deleted !", {
+      position: "bottom-right",
+      autoClose: 5000,
+      hideProgressBar: false,
+      closeOnClick: true,
+      pauseOnHover: false,
+      draggable: true,
+      progress: undefined,
+      theme: "dark",
+      transition: Bounce,
+    });
+  };
+  const handleEdit = (id: any) => {
+    const item = items.find(item => item.id === id);
+    if (item) {
+      setForm({ website: item.website, username: item.username, password: item.password });
+      handleDelete(id);
+
+    }
+
   }
   const handleCopy = (text: string) => {
     toast("Copied to clipboard!", {
       position: "bottom-right",
       autoClose: 5000,
       hideProgressBar: false,
-      closeOnClick: false,
-      pauseOnHover: true,
+      closeOnClick: true,
+      pauseOnHover: false,
       draggable: true,
       progress: undefined,
       theme: "dark",
@@ -89,11 +160,23 @@ export default function Home() {
     });
     navigator.clipboard.writeText(text);
   };
+
   return (
     <>
 
-      <div className="absolute inset-0 -z-10 h-full w-full bg-white bg-[linear-gradient(to_right,#f0f0f0_1px,transparent_1px),linear-gradient(to_bottom,#f0f0f0_1px,transparent_1px)] bg-[size:6rem_4rem]"><div className="absolute bottom-0 left-0 right-0 top-0 bg-[radial-gradient(circle_800px_at_100%_200px,#d5c5ff,transparent)]"></div></div>
-      <div className="bg-gray w-300 h-100 rounded-xl mt-5  flex  text-center flex-col">
+      <ToastContainer position="bottom-right"
+        autoClose={3000}
+        hideProgressBar={false}
+        newestOnTop={false}
+        closeOnClick={false}
+        rtl={false}
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+        theme="dark"
+        transition={Bounce} />
+
+      <div className="md:container md:px-2 bg-gray w-300 h-100 rounded-xl mt-5  flex  text-center flex-col">
         <div className="flex items-center select-none flex-col">
           <h1 className="text-2xl md:text-3xl font-extrabold tracking-tight">
             <a href="/" className="hover:cursor-pointer">
@@ -113,27 +196,46 @@ export default function Home() {
         </div>
         <div className="flex flex-col h-50 justify-center mt-5 mb-5  ">
           <label className="text-black">Enter website URL</label>
-          <input value={form.website} onChange={handleChange} name="website" className="text-black p-1 transition-all duration-200 border-2 hover:border-purple-500 ml-48 w-203 h-10  border-black rounded-2xl" placeholder="www.website.com" type="url" />
+          <input value={form.website} onChange={handleChange} name="website" className="text-black ml-88 p-1 transition-all duration-200 border-2 bg-white hover:border-purple-500 ml-48 w-203 h-10  border-black rounded-2xl" placeholder="www.website.com" type="url" id="website" />
           <div className="flex mt-5 justify-center gap-3 ">
 
-            <input value={form.username} onChange={handleChange} name="username" className="text-black p-1 transition-all duration-200 border-2 hover:border-purple-500  w-100  h-10 border-black rounded-2xl" placeholder="Enter username" />
+            <input value={form.username} onChange={handleChange} name="username" className="text-black p-1 transition-all duration-200 border-2 bg-white hover:border-purple-500  w-100  h-10 border-black rounded-2xl" placeholder="Enter username" id="username" />
             <div className="relative">
-              <input value={form.password} onChange={handleChange} name="password" className="text-black p-1 transition-all duration-200 border-2 hover:border-purple-500  w-100  h-10 border-black rounded-2xl" placeholder="Enter password" type="password" />
-              <span className="absolute text-white right-2 hover:cursor-pointer transition-all duration-200" onClick={showPass}><img src="/eye-open.png" onClick={changeImg} className="h-9 w-9 m-0.5 transition-all duration-200"></img></span>
+              <input id="password"
+                value={form.password}
+                onChange={handleChange}
+                name="password"
+                type={showPassword ? "text" : "password"}
+                className="text-black p-1 bg-white transition-all duration-200 border-2 hover:border-purple-500 w-100 h-10 border-black rounded-2xl"
+                placeholder="Enter password"
+              />
+
+              <button
+                type="button"
+                onClick={() => setShowPassword(prev => !prev)}
+                className="absolute right-2 top-1/2 -translate-y-1/2"
+              >
+                <img
+                  src={showPassword ? "/eye-open.png" : "/closed-eyes.png"}
+                  className="h-9 w-9"
+                  alt="toggle password"
+                />
+              </button>
             </div>
+
 
           </div>
 
         </div>
-        <button onClick={savepassword} className="bg-purple-600 ml-124 w-50 mb-5 flex justify-center items-center    text-black font-bold rounded-3xl p-3  hover:cursor-pointer transition-all duration-300 shadow hover:-translate-y-2 hover:shadow-2xl hover:bg-purple-400">Add password  <AddIcon /></button>
+        <button onClick={savepassword} className="bg-purple-500 ml-124 w-50 mb-5 flex justify-center items-center    text-black font-bold rounded-3xl p-3  hover:cursor-pointer transition-all duration-300 shadow hover:-translate-y-2 hover:shadow-2xl hover:bg-purple-300">Save password<AddIcon /></button>
 
-        <div className="mt-3">
+        <div className="md:mt-3">
 
-          <h1 className="text-black mb-3 relative w-70 text-xl font-bold">Your saved passwords</h1>
-          {passwordArr.length === 0 && <div>No passwords to show</div>}
-          {passwordArr.length > 0 && <div className="relative overflow-x-auto bg-neutral-primary-soft shadow-xs rounded-xl border border-default">
+          <h1 className="text-black mb-3 relative w-70 text-xl font-bold">Your passwords</h1>
+          {items.length === 0 && <div>No passwords to show</div>}
+          {items.length > 0 && <div className="relative overflow-x-auto bg-neutral-primary-soft shadow-xs rounded-xl border border-default">
             <table className="w-full  text-sm text-left rtl:text-right text-body">
-              <thead className="text-sm text-center  bg-purple-600 text-white text-body bg-neutral-secondary-soft border-b rounded-base border-default">
+              <thead className="text-sm text-center  bg-purple-500 text-white text-body bg-neutral-secondary-soft border-b rounded-base border-default">
                 <tr>
                   <th scope="col" className="px-6 py-3 font-medium">
                     Website
@@ -150,7 +252,7 @@ export default function Home() {
 
                 </tr>
               </thead>
-              {passwordArr.map((item, index) => (
+              {items.map((item, index) => (
                 <tbody className="bg-purple-200 text-center">
 
                   <tr key={index} className="bg-neutral-primary w-full border-b border-default">
@@ -174,17 +276,7 @@ export default function Home() {
                       <div className="flex justify-center items-center">
                         {item.password}
                         <div onClick={() => handleCopy(item.password)}>
-                          <ToastContainer position="bottom-right"
-                            autoClose={3000}
-                            hideProgressBar={false}
-                            newestOnTop={false}
-                            closeOnClick={false}
-                            rtl={false}
-                            pauseOnFocusLoss
-                            draggable
-                            pauseOnHover
-                            theme="dark"
-                            transition={Bounce} />
+
                           <CopyIcon />
                         </div>
 
@@ -192,11 +284,13 @@ export default function Home() {
                     </td>
                     <td className="px-4 py-4 ">
                       <div className="flex justify-center items-center gap-3">
-                        <div onClick={handleEdit}>
+                        <div onClick={() => handleEdit(item.id)}>
                           <EditIcon />
                         </div>
-                        <div onClick={() => handleDelete(index)}>
+                        <div onClick={() => handleDelete(item.id)}>
+
                           <DeleteIcon />
+
                         </div>
                       </div>
 
@@ -218,3 +312,5 @@ export default function Home() {
     </>
   );
 }
+
+
